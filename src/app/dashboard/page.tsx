@@ -99,6 +99,19 @@ export default async function DashboardPage() {
             {p?.full_name?.charAt(0).toUpperCase()}
           </Link>
         </div>
+
+        {/*  Nav pour ajouter le lien admin */}
+        <div className="hidden md:flex items-center gap-6">
+        <Link href="/dashboard" className="text-[#C8A951] text-sm font-medium">Accueil</Link>
+        <Link href="/marches" className="text-gray-500 hover:text-white text-sm transition-colors">Marchés</Link>
+        <Link href="/actualites" className="text-gray-500 hover:text-white text-sm transition-colors">Actualités</Link>
+        <Link href="/pays" className="text-gray-500 hover:text-white text-sm transition-colors">Pays</Link>
+        {p?.role === 'admin' && (
+            <Link href="/admin" className="text-red-400 hover:text-red-300 text-sm transition-colors">
+            🔐 Admin
+            </Link>
+            )}
+        </div>
       </nav>
 
       <div className="max-w-7xl mx-auto px-6 py-8">

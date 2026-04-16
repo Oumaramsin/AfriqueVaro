@@ -87,6 +87,7 @@ export default function MarchesClient({
         <Link href="/profil" className="w-8 h-8 rounded-full bg-[#C8A951]/20 flex items-center justify-center text-[#C8A951] text-sm font-bold">
           P
         </Link>
+        
       </nav>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
