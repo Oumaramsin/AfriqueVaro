@@ -32,6 +32,8 @@ export default function AdminClient({
   const [error, setError] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [showNotifs, setShowNotifs] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadNotifs() {
@@ -51,7 +53,19 @@ export default function AdminClient({
     await supabase.from('notifications').update({ is_read: true }).eq('id', id)
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
   }
-
+  const syncWorldBank = async () => {
+  setSyncing(true)
+  setSyncResult(null)
+  try {
+    const res = await fetch('/api/sync-worldbank', { method: 'POST' })
+    const data = await res.json()
+    setSyncResult(`✓ ${data.inserted} données importées depuis la Banque Mondiale`)
+  } catch (_e) {
+    setSyncResult('Erreur lors de la synchronisation')
+  } finally {
+    setSyncing(false)
+  }
+}
   // Formulaires
   const [cours, setCours] = useState({
     bourse_id: '', symbole: '', nom_entreprise: '',
@@ -276,6 +290,30 @@ export default function AdminClient({
         )}
 
         {/* Tabs */}
+
+        {/* Bouton sync World Bank */}
+        <div className="bg-[#141414] rounded-2xl border border-white/5 p-4 mb-6 flex items-center justify-between">
+        <div>
+            <p className="text-sm font-medium text-white">🌍 Données Banque Mondiale</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+            Importe automatiquement PIB, inflation, chômage... pour tous les pays
+            </p>
+        </div>
+        <button
+            onClick={syncWorldBank}
+            disabled={syncing}
+            className="bg-[#C8A951] text-black px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#E2C97E] transition-colors disabled:opacity-50 whitespace-nowrap ml-4"
+        >
+            {syncing ? '⏳ Sync...' : '🔄 Synchroniser'}
+        </button>
+        </div>
+
+        {syncResult && (
+        <div className="bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-4 py-3 mb-4 text-sm">
+            {syncResult}
+        </div>
+        )}
+
         <div className="grid grid-cols-4 gap-3 mb-8">
           {TABS.map(t => (
             <button key={t.id} onClick={() => { setTab(t.id as Tab); setError(null) }}
