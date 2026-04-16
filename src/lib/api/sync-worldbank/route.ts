@@ -1,12 +1,14 @@
-import { createServerSupabase } from '@/lib/supabase-server'
-import { fetchAllIndicateurs, WB_COUNTRY_CODES, INDICATEUR_LABELS, formatIndicateur } from '@/lib/api/worldbank'
+import { createClient } from '@supabase/supabase-js'
+import { fetchAllIndicateurs, WB_COUNTRY_CODES, INDICATEUR_LABELS } from '@/lib/api/worldbank'
 import { NextResponse } from 'next/server'
 
 export async function POST() {
   try {
-    const supabase = await createServerSupabase()
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
 
-    // Récupère tous les pays de la DB
     const { data: pays } = await supabase
       .from('pays')
       .select('id, code, nom')
@@ -27,7 +29,6 @@ export async function POST() {
         for (const [key, data] of Object.entries(indicateurs)) {
           if (!data) continue
 
-          // Vérifie si la donnée existe déjà
           const { data: existing } = await supabase
             .from('donnees_macro')
             .select('id')
@@ -36,7 +37,7 @@ export async function POST() {
             .eq('annee', parseInt(data.annee))
             .single()
 
-          if (existing) continue // Déjà en base, on skip
+          if (existing) continue
 
           await supabase.from('donnees_macro').insert({
             pays_id: p.id,
@@ -54,11 +55,7 @@ export async function POST() {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      inserted: totalInserted,
-      errors
-    })
+    return NextResponse.json({ success: true, inserted: totalInserted, errors })
 
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
