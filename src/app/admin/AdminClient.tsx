@@ -34,6 +34,8 @@ export default function AdminClient({
   const [showNotifs, setShowNotifs] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
+  const [syncingAlpha, setSyncingAlpha] = useState(false)
+  const [syncAlphaResult, setSyncAlphaResult] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadNotifs() {
@@ -189,6 +191,21 @@ export default function AdminClient({
     { id: 'taux', label: '💱 Taux', desc: 'Devises' },
   ]
 
+  /*API AlphaAvantage*/
+  const syncAlphaVantage = async () => {
+  setSyncingAlpha(true)
+  setSyncAlphaResult(null)
+  try {
+    const res = await fetch('/api/sync-alphavantage', { method: 'POST' })
+    const data = await res.json()
+    setSyncAlphaResult(`✓ ${data.inserted} cours importés depuis Alpha Vantage`)
+  } catch (_e) {
+    setSyncAlphaResult('Erreur lors de la synchronisation Alpha Vantage')
+  } finally {
+    setSyncingAlpha(false)
+  }
+}
+
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white">
 
@@ -292,7 +309,7 @@ export default function AdminClient({
         {/* Tabs */}
 
         {/* Bouton sync World Bank */}
-        <div className="bg-[#141414] rounded-2xl border border-white/5 p-4 mb-6 flex items-center justify-between">
+       <div className="bg-[#141414] rounded-2xl border border-white/5 p-4 mb-6 flex items-center justify-between">
         <div>
             <p className="text-sm font-medium text-white">🌍 Données Banque Mondiale</p>
             <p className="text-xs text-gray-500 mt-0.5">
@@ -313,6 +330,34 @@ export default function AdminClient({
             {syncResult}
         </div>
         )}
+
+        {/* Bouton sync Alpha Vantage */}
+        <div className="bg-[#141414] rounded-2xl border border-white/5 p-4 mb-6 flex items-center justify-between">
+        <div>
+            <p className="text-sm font-medium text-white">📈 Cours Alpha Vantage</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+            Importe les cours des grandes valeurs africaines (JSE, NSE...)
+            </p>
+            <p className="text-xs text-yellow-500 mt-1">
+            ⚠️ Opération longue (~2 min) — limite 5 requêtes/min
+            </p>
+        </div>
+        <button
+            onClick={syncAlphaVantage}
+            disabled={syncingAlpha}
+            className="bg-[#C8A951] text-black px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#E2C97E] transition-colors disabled:opacity-50 whitespace-nowrap ml-4"
+        >
+            {syncingAlpha ? '⏳ Sync en cours...' : '🔄 Synchroniser'}
+        </button>
+        </div>
+
+        {syncAlphaResult && (
+        <div className="bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-4 py-3 mb-4 text-sm">
+            {syncAlphaResult}
+        </div>
+        )}
+        
+
 
         <div className="grid grid-cols-4 gap-3 mb-8">
           {TABS.map(t => (
