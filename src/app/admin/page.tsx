@@ -6,7 +6,9 @@ export default async function AdminPage() {
   const supabase = await createServerSupabase()
   const { data: { session } } = await supabase.auth.getSession()
 
+    
   if (!session) redirect('/login')
+    
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -27,4 +29,7 @@ export default async function AdminPage() {
     .order('nom')
 
   return <AdminClient pays={pays || []} bourses={bourses || []} />
+
+  
 }
+

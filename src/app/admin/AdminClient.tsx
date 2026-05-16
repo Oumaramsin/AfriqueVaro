@@ -232,7 +232,25 @@ export default function AdminClient({
           <p className="text-gray-500 mt-1 text-sm">
             Ajoute et gère les données de la plateforme
           </p>
+          
+          <Link href="/admin/societes">
+            <div className="bg-[#141414] rounded-2xl border border-white/5 p-4 hover:border-[#C8A951]/30 transition-all cursor-pointer">
+              <div className="text-2xl mb-2">🏢</div>
+              <p className="text-sm font-medium text-white">Sociétés</p>
+              <p className="text-xs text-gray-500 mt-0.5">Gérer les sociétés cotées</p>
+            </div>    
+          </Link>
+          
+          <Link href="/admin/bilans">
+            <div className="bg-[#141414] rounded-2xl border border-white/5 p-4 hover:border-[#C8A951]/30 transition-all cursor-pointer">
+              <div className="text-2xl mb-2">📊</div>
+              <p className="text-sm font-medium text-white">Bilans</p>
+              <p className="text-xs text-gray-500 mt-0.5">États financiers OHADA</p>
+            </div>
+          </Link>
         </div>
+
+        
 
         {/* Dans la nav admin, à côté du bouton "Zone Admin" */}
         <div className="relative">
