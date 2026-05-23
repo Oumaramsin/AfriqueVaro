@@ -14,7 +14,9 @@ export default async function SocietesPage() {
   const [{ data: societes }, { data: secteurs }, { data: bourses }, { data: zones }] =
     await Promise.all([
       supabase.from('societes').select('*, secteurs(nom), bourses(nom, code), zones(nom)').order('nom'),
-      supabase.from('secteurs').select('*').order('nom'),
+      supabase.from('secteurs').select('id, nom, parent_id')
+        .order('parent_id', { ascending: true, nullsFirst: true })
+        .order('nom'),
       supabase.from('bourses').select('*').order('nom'),
       supabase.from('zones').select('*').order('nom'),
     ])

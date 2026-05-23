@@ -18,7 +18,12 @@ type Societe = {
   zones?: { nom: string } | null
 }
 
-type Secteur = { id: string; nom: string }
+type Secteur = {
+  id: string
+  nom: string
+  parent_id: string | null
+}
+
 type Bourse = { id: string; nom: string; code: string }
 type Zone = { id: string; nom: string }
 
@@ -51,16 +56,21 @@ export default function SocietesClient({
     nom: '', symbole: '', description: '',
     secteur_id: '', bourse_id: '', zone_id: ''
   })
-  const [secteurForm, setSecteurForm] = useState({ nom: '', description: '' })
+  const [secteurForm, setSecteurForm] = useState({ nom: '', parent_id: '', description: '' })
   const [bourseForm, setBourseForm] = useState({ nom: '', code: '', devise: '', description: '' })
   const [zoneForm, setZoneForm] = useState({ nom: '', description: '' })
+
+  // Secteurs parents (sans parent_id)
+  const secteursParents = secteurs.filter(s => !s.parent_id)
+  // Sous-catégories (avec parent_id)
+  const sousCategories = secteurs.filter(s => s.parent_id)
 
   const showSuccess = (msg: string) => {
     setSuccess(msg)
     setTimeout(() => setSuccess(null), 3000)
   }
 
-  // ── SOCIÉTÉS ──────────────────────────────────────
+  // ── SOCIÉTÉS ──
 
   const handleAddSociete = async () => {
     if (!societeForm.nom) { setError('Le nom est requis'); return }
@@ -125,33 +135,39 @@ export default function SocietesClient({
       bourse_id: societe.bourse_id || '',
       zone_id: societe.zone_id || '',
     })
+    // Scroll vers le haut du formulaire
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // ── SECTEURS ──────────────────────────────────────
+  // ── SECTEURS ──
 
   const handleAddSecteur = async () => {
     if (!secteurForm.nom) { setError('Le nom est requis'); return }
     setLoading(true); setError(null)
 
     const { data, error } = await supabase.from('secteurs')
-      .insert({ nom: secteurForm.nom, description: secteurForm.description || null })
+      .insert({
+        nom: secteurForm.nom,
+        parent_id: secteurForm.parent_id || null,
+        description: secteurForm.description || null
+      })
       .select().single()
 
     if (error) { setError(error.message); setLoading(false); return }
     setSecteurs(prev => [...prev, data])
-    setSecteurForm({ nom: '', description: '' })
+    setSecteurForm({ nom: '', parent_id: '', description: '' })
     showSuccess('Secteur ajouté !')
     setLoading(false)
   }
 
   const handleDeleteSecteur = async (id: string) => {
-    if (!confirm('Supprimer ce secteur ?')) return
+    if (!confirm('Supprimer ce secteur ? Les sous-catégories associées seront aussi supprimées.')) return
     await supabase.from('secteurs').delete().eq('id', id)
-    setSecteurs(prev => prev.filter(s => s.id !== id))
+    setSecteurs(prev => prev.filter(s => s.id !== id && s.parent_id !== id))
     showSuccess('Secteur supprimé !')
   }
 
-  // ── BOURSES ───────────────────────────────────────
+  // ── BOURSES ──
 
   const handleAddBourse = async () => {
     if (!bourseForm.nom || !bourseForm.code) { setError('Nom et code requis'); return }
@@ -179,7 +195,7 @@ export default function SocietesClient({
     showSuccess('Bourse supprimée !')
   }
 
-  // ── ZONES ─────────────────────────────────────────
+  // ── ZONES ──
 
   const handleAddZone = async () => {
     if (!zoneForm.nom) { setError('Le nom est requis'); return }
@@ -209,10 +225,33 @@ export default function SocietesClient({
 
   const TABS = [
     { id: 'societes', label: '🏢 Sociétés', count: societes.length },
-    { id: 'secteurs', label: '🏭 Secteurs', count: secteurs.length },
+    { id: 'secteurs', label: '🏭 Secteurs', count: secteursParents.length },
     { id: 'bourses', label: '📈 Bourses', count: bourses.length },
     { id: 'zones', label: '🌍 Zones', count: zones.length },
   ]
+
+  // Sélecteur de secteur à deux niveaux
+  const SecteurSelect = () => (
+    <select
+      value={societeForm.secteur_id}
+      onChange={e => setSocieteForm(p => ({ ...p, secteur_id: e.target.value }))}
+      className={selectClass}
+    >
+      <option value="">Sélectionner un secteur</option>
+      {secteursParents.map(parent => {
+        const enfants = sousCategories.filter(s => s.parent_id === parent.id)
+        return (
+          <optgroup key={parent.id} label={`── ${parent.nom} ──`}>
+            {enfants.map(enfant => (
+              <option key={enfant.id} value={enfant.id}>
+                {enfant.nom}
+              </option>
+            ))}
+          </optgroup>
+        )
+      })}
+    </select>
+  )
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white">
@@ -235,7 +274,6 @@ export default function SocietesClient({
 
       <div className="max-w-5xl mx-auto px-6 py-8">
 
-        {/* Messages */}
         {success && (
           <div className="bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-4 py-3 mb-6 text-sm">
             ✓ {success}
@@ -268,8 +306,6 @@ export default function SocietesClient({
         {/* ── SOCIÉTÉS ── */}
         {tab === 'societes' && (
           <div className="space-y-6">
-
-            {/* Formulaire ajout/édition */}
             <div className="bg-[#141414] rounded-2xl border border-white/5 p-6">
               <h3 className="font-semibold text-white mb-4">
                 {editId ? '✏️ Modifier la société' : '+ Ajouter une société'}
@@ -295,19 +331,30 @@ export default function SocietesClient({
                     className={inputClass}
                   />
                 </div>
-                <div>
-                  <label className={labelClass}>Secteur</label>
-                  <select
-                    value={societeForm.secteur_id}
-                    onChange={e => setSocieteForm(p => ({ ...p, secteur_id: e.target.value }))}
-                    className={selectClass}
-                  >
-                    <option value="">Sélectionner un secteur</option>
-                    {secteurs.map(s => (
-                      <option key={s.id} value={s.id}>{s.nom}</option>
-                    ))}
-                  </select>
-                </div>
+                
+                  <div>
+                    <label className={labelClass}>Secteur</label>
+                    <select
+                      value={societeForm.secteur_id}
+                      onChange={e => setSocieteForm(p => ({ ...p, secteur_id: e.target.value }))}
+                      className={selectClass}
+                    >
+                      <option value="">Sélectionner un secteur</option>
+                      {secteursParents.map(parent => {
+                        const enfants = sousCategories.filter(s => s.parent_id === parent.id)
+                        return (
+                          <optgroup key={parent.id} label={`── ${parent.nom} ──`}>
+                            {enfants.map(enfant => (
+                              <option key={enfant.id} value={enfant.id}>
+                                {enfant.nom}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )
+                      })}
+                    </select>
+                  </div>
+                
                 <div>
                   <label className={labelClass}>Bourse</label>
                   <select
@@ -355,7 +402,10 @@ export default function SocietesClient({
                 </button>
                 {editId && (
                   <button
-                    onClick={() => { setEditId(null); setSocieteForm({ nom: '', symbole: '', description: '', secteur_id: '', bourse_id: '', zone_id: '' }) }}
+                    onClick={() => {
+                      setEditId(null)
+                      setSocieteForm({ nom: '', symbole: '', description: '', secteur_id: '', bourse_id: '', zone_id: '' })
+                    }}
                     className="px-6 py-3 rounded-xl border border-white/10 text-gray-400 hover:text-white text-sm transition-colors"
                   >
                     Annuler
@@ -366,7 +416,7 @@ export default function SocietesClient({
 
             {/* Liste sociétés */}
             <div className="bg-[#141414] rounded-2xl border border-white/5 overflow-hidden">
-              <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+              <div className="px-5 py-4 border-b border-white/5">
                 <h3 className="font-semibold text-white">
                   {societes.length} société{societes.length > 1 ? 's' : ''}
                 </h3>
@@ -439,28 +489,33 @@ export default function SocietesClient({
         {/* ── SECTEURS ── */}
         {tab === 'secteurs' && (
           <div className="space-y-6">
+
+            {/* Formulaire ajout secteur */}
             <div className="bg-[#141414] rounded-2xl border border-white/5 p-6">
-              <h3 className="font-semibold text-white mb-4">+ Ajouter un secteur</h3>
+              <h3 className="font-semibold text-white mb-4">+ Ajouter un secteur ou une sous-catégorie</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>Nom du secteur *</label>
+                  <label className={labelClass}>Nom *</label>
                   <input
                     type="text"
-                    placeholder="Ex: Finance & Banque..."
+                    placeholder="Ex: Financières, Banques..."
                     value={secteurForm.nom}
                     onChange={e => setSecteurForm(p => ({ ...p, nom: e.target.value }))}
                     className={inputClass}
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Description</label>
-                  <input
-                    type="text"
-                    placeholder="Description courte..."
-                    value={secteurForm.description}
-                    onChange={e => setSecteurForm(p => ({ ...p, description: e.target.value }))}
-                    className={inputClass}
-                  />
+                  <label className={labelClass}>Secteur parent (si sous-catégorie)</label>
+                  <select
+                    value={secteurForm.parent_id}
+                    onChange={e => setSecteurForm(p => ({ ...p, parent_id: e.target.value }))}
+                    className={selectClass}
+                  >
+                    <option value="">Aucun — c&apos;est un secteur principal</option>
+                    {secteursParents.map(s => (
+                      <option key={s.id} value={s.id}>{s.nom}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <button
@@ -468,26 +523,54 @@ export default function SocietesClient({
                 disabled={loading}
                 className="w-full mt-4 bg-[#C8A951] text-black py-3 rounded-xl font-semibold text-sm hover:bg-[#E2C97E] transition-colors disabled:opacity-50"
               >
-                {loading ? 'Ajout...' : '+ Ajouter le secteur'}
+                {loading ? 'Ajout...' : '+ Ajouter'}
               </button>
             </div>
 
+            {/* Liste secteurs avec sous-catégories */}
             <div className="bg-[#141414] rounded-2xl border border-white/5 overflow-hidden">
               <div className="px-5 py-4 border-b border-white/5">
-                <h3 className="font-semibold text-white">{secteurs.length} secteur{secteurs.length > 1 ? 's' : ''}</h3>
+                <h3 className="font-semibold text-white">
+                  {secteursParents.length} secteur{secteursParents.length > 1 ? 's' : ''} · {sousCategories.length} sous-catégorie{sousCategories.length > 1 ? 's' : ''}
+                </h3>
               </div>
               <div className="divide-y divide-white/5">
-                {secteurs.map(secteur => (
-                  <div key={secteur.id} className="px-5 py-4 flex items-center justify-between hover:bg-white/3 transition-colors">
-                    <p className="text-white font-medium">🏭 {secteur.nom}</p>
-                    <button
-                      onClick={() => handleDeleteSecteur(secteur.id)}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
-                    >
-                      🗑️ Supprimer
-                    </button>
-                  </div>
-                ))}
+                {secteursParents.map(parent => {
+                  const enfants = sousCategories.filter(s => s.parent_id === parent.id)
+                  return (
+                    <div key={parent.id}>
+                      {/* Secteur parent */}
+                      <div className="px-5 py-3 flex items-center justify-between bg-[#1a1a1a]">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[#C8A951] font-bold text-sm">▸</span>
+                          <p className="text-white font-semibold text-sm">{parent.nom}</p>
+                          <span className="text-xs text-gray-600">({enfants.length} catégorie{enfants.length > 1 ? 's' : ''})</span>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteSecteur(parent.id)}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                      {/* Sous-catégories */}
+                      {enfants.map(enfant => (
+                        <div key={enfant.id} className="px-5 py-2.5 flex items-center justify-between hover:bg-white/3 transition-colors border-t border-white/3">
+                          <div className="flex items-center gap-2 pl-6">
+                            <span className="text-gray-600 text-xs">└</span>
+                            <p className="text-gray-300 text-sm">{enfant.nom}</p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteSecteur(enfant.id)}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </div>

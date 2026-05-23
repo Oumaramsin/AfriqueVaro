@@ -8,7 +8,7 @@ type Societe = {
   id: string
   nom: string
   symbole: string | null
-  bourses: { code: string } | null  
+  bourses: { code: string } | null
 }
 
 type Bilan = {
@@ -19,7 +19,7 @@ type Bilan = {
   devise: string
   statut: string
   created_at: string
-  societesList?: { nom: string; symbole: string | null } | null
+  societes?: { nom: string; symbole: string | null } | null
 }
 
 type BilanLigne = {
@@ -37,7 +37,6 @@ type BilanLigne = {
   is_categorie: boolean
 }
 
-// Structure OHADA ACTIF
 const STRUCTURE_ACTIF = [
   { libelle: 'IMMOBILISATIONS INCORPORELLES', is_categorie: true, is_total: false },
   { libelle: 'Frais de développement et de prospection', is_categorie: false, is_total: false },
@@ -75,7 +74,6 @@ const STRUCTURE_ACTIF = [
   { libelle: 'TOTAL ACTIFS', is_categorie: false, is_total: true },
 ]
 
-// Structure OHADA PASSIF
 const STRUCTURE_PASSIF = [
   { libelle: 'CAPITAUX PROPRES ET RESSOURCES ASSIMILÉES', is_categorie: true, is_total: false },
   { libelle: 'Capital', is_categorie: false, is_total: false },
@@ -84,8 +82,8 @@ const STRUCTURE_PASSIF = [
   { libelle: 'Écarts de réévaluation', is_categorie: false, is_total: false },
   { libelle: 'Réserves indisponibles', is_categorie: false, is_total: false },
   { libelle: 'Réserves libres', is_categorie: false, is_total: false },
-  { libelle: 'Report à nouveau (+ou-)', is_categorie: false, is_total: false },
-  { libelle: 'Résultat net de l\'exercice (+ou-)', is_categorie: false, is_total: false },
+  { libelle: "Report à nouveau (+ou-)", is_categorie: false, is_total: false },
+  { libelle: "Résultat net de l'exercice (+ou-)", is_categorie: false, is_total: false },
   { libelle: 'Autres capitaux propres', is_categorie: false, is_total: false },
   { libelle: 'TOTAL CAPITAUX PROPRES', is_categorie: false, is_total: true },
   { libelle: 'DETTES FINANCIÈRES ET RESSOURCES ASSIMILÉES', is_categorie: true, is_total: false },
@@ -98,13 +96,13 @@ const STRUCTURE_PASSIF = [
   { libelle: 'PASSIF CIRCULANT H.A.O.', is_categorie: true, is_total: false },
   { libelle: 'DETTES CIRCULANTES', is_categorie: true, is_total: false },
   { libelle: 'Clients, avances reçues', is_categorie: false, is_total: false },
-  { libelle: 'Fournisseurs d\'exploitation', is_categorie: false, is_total: false },
+  { libelle: "Fournisseurs d'exploitation", is_categorie: false, is_total: false },
   { libelle: 'Dettes fiscales', is_categorie: false, is_total: false },
   { libelle: 'Dettes sociales', is_categorie: false, is_total: false },
   { libelle: 'Autres dettes', is_categorie: false, is_total: false },
   { libelle: 'TOTAL DETTES CIRCULANTES', is_categorie: false, is_total: true },
   { libelle: 'TRÉSORERIE - PASSIF', is_categorie: true, is_total: false },
-  { libelle: 'Banques, crédits d\'escompte', is_categorie: false, is_total: false },
+  { libelle: "Banques, crédits d'escompte", is_categorie: false, is_total: false },
   { libelle: 'Banques, établissements financiers et crédits de trésorerie', is_categorie: false, is_total: false },
   { libelle: 'TOTAL TRÉSORERIE - PASSIF', is_categorie: false, is_total: true },
   { libelle: 'Écarts de conversion - Passif', is_categorie: false, is_total: false },
@@ -159,7 +157,7 @@ export default function BilansClient({
         devise: bilanForm.devise,
         statut: 'brouillon',
       })
-      .select('*, societes(nom, symbole)')
+      .select()
       .single()
 
     if (bilanError) {
@@ -200,7 +198,22 @@ export default function BilansClient({
 
     await supabase.from('bilan_lignes').insert([...lignesActif, ...lignesPassif])
 
-    setBilans(prev => [bilan, ...prev])
+    // Récupère le nom depuis societesList en mémoire
+    const societe = societesList.find((s: Societe) => s.id === bilanForm.societe_id)
+
+    const bilanAvecSociete: Bilan = {
+      ...bilan,
+      societes: societe
+        ? { nom: societe.nom, symbole: societe.symbole }
+        : null
+    }
+
+    setBilans(prev => {
+      const exists = prev.find(b => b.id === bilanAvecSociete.id)
+      if (exists) return prev
+      return [bilanAvecSociete, ...prev]
+    })
+
     showSuccess('Bilan OHADA créé avec succès !')
     setView('liste')
     setBilanForm({
@@ -244,7 +257,6 @@ export default function BilansClient({
   const handleSaveLignes = async () => {
     setLoading(true)
     setError(null)
-
     const updates = lignes.map(l =>
       supabase.from('bilan_lignes').update({
         brut: l.brut,
@@ -253,7 +265,6 @@ export default function BilansClient({
         amorts_deprec_precedent: l.amorts_deprec_precedent,
       }).eq('id', l.id)
     )
-
     await Promise.all(updates)
     showSuccess('Bilan sauvegardé !')
     setLoading(false)
@@ -275,159 +286,64 @@ export default function BilansClient({
     showSuccess('Bilan supprimé !')
   }
 
-  const getTotalNetPrecedent = (cote: 'actif' | 'passif') => {
-  return lignes
-    .filter(l => l.cote === cote && !l.is_total && !l.is_categorie)
-    .reduce((sum, l) => sum + getNETPrecedent(l), 0)
-  }
-
-  // calcul les bruts et les amorts 
-  const getBrutSection = (cote: 'actif' | 'passif', libelleTotal: string) => {
-  const totalIndex = lignes.findIndex(l => l.cote === cote && l.libelle === libelleTotal)
-  if (totalIndex === -1) return 0
-
-  let startIndex = 0
-  for (let i = totalIndex - 1; i >= 0; i--) {
-    if (lignes[i].is_total && lignes[i].cote === cote) {
-      startIndex = i + 1
-      break
+  // ── Calculs sections ──
+  const getSection = (cote: 'actif' | 'passif', libelleTotal: string) => {
+    const totalIndex = lignes.findIndex(l => l.cote === cote && l.libelle === libelleTotal)
+    if (totalIndex === -1) return []
+    let startIndex = 0
+    for (let i = totalIndex - 1; i >= 0; i--) {
+      if (lignes[i].is_total && lignes[i].cote === cote) { startIndex = i + 1; break }
     }
+    return lignes.slice(startIndex, totalIndex).filter(l => !l.is_total && !l.is_categorie && l.cote === cote)
   }
 
-  return lignes
-    .slice(startIndex, totalIndex)
-    .filter(l => !l.is_total && !l.is_categorie && l.cote === cote)
-    .reduce((sum, l) => sum + (l.brut || 0), 0)
-}
+  const getBrutSection = (cote: 'actif' | 'passif', libelleTotal: string) =>
+    getSection(cote, libelleTotal).reduce((sum, l) => sum + (l.brut || 0), 0)
 
-const getAmortsSection = (cote: 'actif' | 'passif', libelleTotal: string) => {
-  const totalIndex = lignes.findIndex(l => l.cote === cote && l.libelle === libelleTotal)
-  if (totalIndex === -1) return 0
+  const getAmortsSection = (cote: 'actif' | 'passif', libelleTotal: string) =>
+    getSection(cote, libelleTotal).reduce((sum, l) => sum + (l.amorts_deprec || 0), 0)
 
-  let startIndex = 0
-  for (let i = totalIndex - 1; i >= 0; i--) {
-    if (lignes[i].is_total && lignes[i].cote === cote) {
-      startIndex = i + 1
-      break
-    }
-  }
+  const getBrutSectionPrecedent = (cote: 'actif' | 'passif', libelleTotal: string) =>
+    getSection(cote, libelleTotal).reduce((sum, l) => sum + (l.brut_precedent || 0), 0)
 
-  return lignes
-    .slice(startIndex, totalIndex)
-    .filter(l => !l.is_total && !l.is_categorie && l.cote === cote)
-    .reduce((sum, l) => sum + (l.amorts_deprec || 0), 0)
-}
+  const getAmortsSectionPrecedent = (cote: 'actif' | 'passif', libelleTotal: string) =>
+    getSection(cote, libelleTotal).reduce((sum, l) => sum + (l.amorts_deprec_precedent || 0), 0)
 
-const getBrutSectionPrecedent = (cote: 'actif' | 'passif', libelleTotal: string) => {
-  const totalIndex = lignes.findIndex(l => l.cote === cote && l.libelle === libelleTotal)
-  if (totalIndex === -1) return 0
+  const getTotalSection = (cote: 'actif' | 'passif', libelleTotal: string) =>
+    getSection(cote, libelleTotal).reduce((sum, l) => sum + getNET(l), 0)
 
-  let startIndex = 0
-  for (let i = totalIndex - 1; i >= 0; i--) {
-    if (lignes[i].is_total && lignes[i].cote === cote) {
-      startIndex = i + 1
-      break
-    }
-  }
+  const getTotalSectionPrecedent = (cote: 'actif' | 'passif', libelleTotal: string) =>
+    getSection(cote, libelleTotal).reduce((sum, l) => sum + getNETPrecedent(l), 0)
 
-  return lignes
-    .slice(startIndex, totalIndex)
-    .filter(l => !l.is_total && !l.is_categorie && l.cote === cote)
-    .reduce((sum, l) => sum + (l.brut_precedent || 0), 0)
-}
+  const getLignesBase = (cote: 'actif' | 'passif') =>
+    lignes.filter(l => l.cote === cote && !l.is_total && !l.is_categorie)
 
-const getAmortsSectionPrecedent = (cote: 'actif' | 'passif', libelleTotal: string) => {
-  const totalIndex = lignes.findIndex(l => l.cote === cote && l.libelle === libelleTotal)
-  if (totalIndex === -1) return 0
+  const getTotalNet = (cote: 'actif' | 'passif') =>
+    getLignesBase(cote).reduce((sum, l) => sum + getNET(l), 0)
 
-  let startIndex = 0
-  for (let i = totalIndex - 1; i >= 0; i--) {
-    if (lignes[i].is_total && lignes[i].cote === cote) {
-      startIndex = i + 1
-      break
-    }
-  }
+  const getTotalNetPrecedent = (cote: 'actif' | 'passif') =>
+    getLignesBase(cote).reduce((sum, l) => sum + getNETPrecedent(l), 0)
 
-  return lignes
-    .slice(startIndex, totalIndex)
-    .filter(l => !l.is_total && !l.is_categorie && l.cote === cote)
-    .reduce((sum, l) => sum + (l.amorts_deprec_precedent || 0), 0)
-}
+  const getTotalBrut = (cote: 'actif' | 'passif') =>
+    getLignesBase(cote).reduce((sum, l) => sum + (l.brut || 0), 0)
 
-// Pour le TOTAL ACTIFS/PASSIFS final
-const getTotalBrut = (cote: 'actif' | 'passif') => {
-  return lignes
-    .filter(l => l.cote === cote && !l.is_total && !l.is_categorie)
-    .reduce((sum, l) => sum + (l.brut || 0), 0)
-}
+  const getTotalAmorts = (cote: 'actif' | 'passif') =>
+    getLignesBase(cote).reduce((sum, l) => sum + (l.amorts_deprec || 0), 0)
 
-const getTotalAmorts = (cote: 'actif' | 'passif') => {
-  return lignes
-    .filter(l => l.cote === cote && !l.is_total && !l.is_categorie)
-    .reduce((sum, l) => sum + (l.amorts_deprec || 0), 0)
-}
+  const getTotalBrutPrecedent = (cote: 'actif' | 'passif') =>
+    getLignesBase(cote).reduce((sum, l) => sum + (l.brut_precedent || 0), 0)
 
-const getTotalBrutPrecedent = (cote: 'actif' | 'passif') => {
-  return lignes
-    .filter(l => l.cote === cote && !l.is_total && !l.is_categorie)
-    .reduce((sum, l) => sum + (l.brut_precedent || 0), 0)
-}
-
-const getTotalAmortsPrecedent = (cote: 'actif' | 'passif') => {
-  return lignes
-    .filter(l => l.cote === cote && !l.is_total && !l.is_categorie)
-    .reduce((sum, l) => sum + (l.amorts_deprec_precedent || 0), 0)
-}
-
-  const getTotalSection = (cote: 'actif' | 'passif', libelleTotal: string) => {
-  // Trouve l'index de la ligne total
-  const totalIndex = lignes.findIndex(l => l.cote === cote && l.libelle === libelleTotal)
-  if (totalIndex === -1) return 0
-
-  // Remonte jusqu'au total précédent ou au début pour trouver les lignes de la section
-  let startIndex = 0
-  for (let i = totalIndex - 1; i >= 0; i--) {
-    if (lignes[i].is_total && lignes[i].cote === cote) {
-      startIndex = i + 1
-      break
-    }
-  }
-
-  // Additionne les lignes non-totales et non-catégories de la section
-  return lignes
-    .slice(startIndex, totalIndex)
-    .filter(l => !l.is_total && !l.is_categorie && l.cote === cote)
-    .reduce((sum, l) => sum + getNET(l), 0)
-}
-
-const getTotalSectionPrecedent = (cote: 'actif' | 'passif', libelleTotal: string) => {
-  const totalIndex = lignes.findIndex(l => l.cote === cote && l.libelle === libelleTotal)
-  if (totalIndex === -1) return 0
-
-  let startIndex = 0
-  for (let i = totalIndex - 1; i >= 0; i--) {
-    if (lignes[i].is_total && lignes[i].cote === cote) {
-      startIndex = i + 1
-      break
-    }
-  }
-
-  return lignes
-    .slice(startIndex, totalIndex)
-    .filter(l => !l.is_total && !l.is_categorie && l.cote === cote)
-    .reduce((sum, l) => sum + getNETPrecedent(l), 0)
-}
+  const getTotalAmortsPrecedent = (cote: 'actif' | 'passif') =>
+    getLignesBase(cote).reduce((sum, l) => sum + (l.amorts_deprec_precedent || 0), 0)
 
   const formatNum = (n: number) =>
     new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 0 }).format(Math.round(n))
 
-  const getTotalNet = (cote: 'actif' | 'passif') => {
-  return lignes
-    .filter(l => l.cote === cote && !l.is_total && !l.is_categorie)
-    .reduce((sum, l) => sum + getNET(l), 0)
-}
-
   const currentLignes = lignes.filter(l => l.cote === activeCote)
+
+  const isTotal = (ligne: BilanLigne) => ligne.is_total
+  const isFinalTotal = (ligne: BilanLigne) =>
+    ligne.libelle === 'TOTAL ACTIFS' || ligne.libelle === 'TOTAL PASSIFS'
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white">
@@ -506,9 +422,9 @@ const getTotalSectionPrecedent = (cote: 'actif' | 'passif', libelleTotal: string
                         </div>
                         <div>
                           <p className="font-medium text-white">
-                            {bilan.societesList?.nom}
-                            {bilan.societesList?.symbole && (
-                              <span className="ml-2 text-xs text-[#C8A951]">({bilan.societesList.symbole})</span>
+                            {bilan.societes?.nom || '—'}
+                            {bilan.societes?.symbole && (
+                              <span className="ml-2 text-xs text-[#C8A951]">({bilan.societes.symbole})</span>
                             )}
                           </p>
                           <p className="text-xs text-gray-500 mt-0.5">
@@ -636,13 +552,12 @@ const getTotalSectionPrecedent = (cote: 'actif' | 'passif', libelleTotal: string
         {/* ── SAISIE MONTANTS ── */}
         {view === 'saisie' && selectedBilan && (
           <>
-            {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-xl font-bold">
-                  {selectedBilan.societesList?.nom}
-                  {selectedBilan.societesList?.symbole && (
-                    <span className="ml-2 text-sm text-[#C8A951]">({selectedBilan.societesList.symbole})</span>
+                  {selectedBilan.societes?.nom || '—'}
+                  {selectedBilan.societes?.symbole && (
+                    <span className="ml-2 text-sm text-[#C8A951]">({selectedBilan.societes.symbole})</span>
                   )}
                 </h2>
                 <p className="text-gray-500 text-sm mt-0.5">
@@ -726,7 +641,7 @@ const getTotalSectionPrecedent = (cote: 'actif' | 'passif', libelleTotal: string
             ) : (
               <div className="bg-[#141414] rounded-2xl border border-white/5 overflow-hidden">
 
-                {/* En-tête tableau */}
+                {/* En-tête */}
                 <div className="grid grid-cols-12 gap-0 border-b border-white/10 bg-[#1a1a1a]">
                   <div className="col-span-4 px-4 py-3 text-xs text-gray-400 uppercase tracking-wider font-medium">
                     POSTES {activeCote.toUpperCase()}
@@ -743,7 +658,7 @@ const getTotalSectionPrecedent = (cote: 'actif' | 'passif', libelleTotal: string
                   </div>
                   <div className="col-span-4 border-l border-white/5">
                     <div className="px-4 py-1.5 text-xs text-gray-400 font-medium text-center border-b border-white/5">
-                      {(selectedBilan as Bilan & { exercice_precedent?: number }).exercice_precedent || selectedBilan.exercice - 1} (N-1)
+                      {selectedBilan.exercice_precedent || selectedBilan.exercice - 1} (N-1)
                     </div>
                     <div className="grid grid-cols-3">
                       <div className="px-2 py-1.5 text-xs text-gray-500 text-center">Brut</div>
@@ -760,10 +675,8 @@ const getTotalSectionPrecedent = (cote: 'actif' | 'passif', libelleTotal: string
                     className={`grid grid-cols-12 gap-0 border-b border-white/5 ${
                       ligne.is_categorie
                         ? 'bg-[#1e1e1e]'
-                        : ligne.is_total
-                        ? activeCote === 'actif'
-                          ? 'bg-blue-500/5'
-                          : 'bg-green-500/5'
+                        : isTotal(ligne)
+                        ? activeCote === 'actif' ? 'bg-blue-500/5' : 'bg-green-500/5'
                         : 'hover:bg-white/2'
                     }`}
                   >
@@ -772,44 +685,44 @@ const getTotalSectionPrecedent = (cote: 'actif' | 'passif', libelleTotal: string
                       <span className={`text-xs ${
                         ligne.is_categorie
                           ? 'text-[#C8A951] font-semibold uppercase tracking-wide'
-                          : ligne.is_total
+                          : isTotal(ligne)
                           ? activeCote === 'actif' ? 'text-blue-400 font-bold' : 'text-green-400 font-bold'
-                          : 'text-gray-300'
-                      } ${!ligne.is_categorie && !ligne.is_total ? 'pl-3' : ''}`}>
+                          : 'text-gray-300 pl-3'
+                      }`}>
                         {ligne.libelle}
                       </span>
                     </div>
 
                     {/* N — Brut */}
-                      <div className="col-span-1 border-l border-white/5 flex items-center">
-                        {!ligne.is_categorie && (
-                          ligne.is_total ? (
-                            <span className={`w-full px-2 py-2 text-xs text-right font-mono ${
-                              activeCote === 'actif' ? 'text-blue-300' : 'text-green-300'
-                            }`}>
-                              {ligne.libelle === 'TOTAL ACTIFS' || ligne.libelle === 'TOTAL PASSIFS'
-                                ? formatNum(getTotalBrut(ligne.cote))
-                                : formatNum(getBrutSection(ligne.cote, ligne.libelle))
-                              }
-                            </span>
-                          ) : (
-                            <input
-                              type="number"
-                              value={ligne.brut || ''}
-                              onChange={e => handleUpdateLigne(ligne.id, 'brut', e.target.value)}
-                              className="w-full px-2 py-2 text-xs text-right font-mono bg-transparent border-0 outline-none focus:bg-white/5 text-gray-300 transition-colors"
-                              placeholder="0"
-                            />
-                          )
-                        )}    
+                    <div className="col-span-1 border-l border-white/5 flex items-center">
+                      {!ligne.is_categorie && (
+                        isTotal(ligne) ? (
+                          <span className={`w-full px-2 py-2 text-xs text-right font-mono ${
+                            activeCote === 'actif' ? 'text-blue-300' : 'text-green-300'
+                          }`}>
+                            {isFinalTotal(ligne)
+                              ? formatNum(getTotalBrut(ligne.cote))
+                              : formatNum(getBrutSection(ligne.cote, ligne.libelle))
+                            }
+                          </span>
+                        ) : (
+                          <input
+                            type="number"
+                            value={ligne.brut || ''}
+                            onChange={e => handleUpdateLigne(ligne.id, 'brut', e.target.value)}
+                            className="w-full px-2 py-2 text-xs text-right font-mono bg-transparent border-0 outline-none focus:bg-white/5 text-gray-300 transition-colors"
+                            placeholder="0"
+                          />
+                        )
+                      )}
                     </div>
 
                     {/* N — Amorts */}
-                   <div className="col-span-1 border-l border-white/5 flex items-center">
+                    <div className="col-span-1 border-l border-white/5 flex items-center">
                       {!ligne.is_categorie && (
-                        ligne.is_total ? (
+                        isTotal(ligne) ? (
                           <span className="w-full px-2 py-2 text-xs text-right font-mono text-red-400/70">
-                            {ligne.libelle === 'TOTAL ACTIFS' || ligne.libelle === 'TOTAL PASSIFS'
+                            {isFinalTotal(ligne)
                               ? formatNum(getTotalAmorts(ligne.cote))
                               : formatNum(getAmortsSection(ligne.cote, ligne.libelle))
                             }
@@ -826,87 +739,85 @@ const getTotalSectionPrecedent = (cote: 'actif' | 'passif', libelleTotal: string
                       )}
                     </div>
 
-                    {/* N — Net (calculé) */}
-                       <div className={`col-span-2 border-l border-white/5 flex items-center justify-end px-3 ${
-                          ligne.is_total
-                            ? activeCote === 'actif' ? 'bg-blue-500/10' : 'bg-green-500/10'
-                            : ''
+                    {/* N — Net */}
+                    <div className={`col-span-2 border-l border-white/5 flex items-center justify-end px-3 ${
+                      isTotal(ligne)
+                        ? activeCote === 'actif' ? 'bg-blue-500/10' : 'bg-green-500/10'
+                        : ''
+                    }`}>
+                      {!ligne.is_categorie && (
+                        <span className={`text-xs font-mono font-semibold ${
+                          isTotal(ligne)
+                            ? activeCote === 'actif' ? 'text-blue-300' : 'text-green-300'
+                            : getNET(ligne) < 0 ? 'text-red-400' : 'text-white'
                         }`}>
-                          {!ligne.is_categorie && (
-                            <span className={`text-xs font-mono font-semibold ${
-                              ligne.is_total
-                                ? activeCote === 'actif' ? 'text-blue-300' : 'text-green-300'
-                                : getNET(ligne) < 0 ? 'text-red-400' : 'text-white'
-                            }`}>
-                              {ligne.is_total
-                                ? (ligne.libelle === 'TOTAL ACTIFS' || ligne.libelle === 'TOTAL PASSIFS'
-                                  ? formatNum(getTotalNet(ligne.cote))
-                                  : formatNum(getTotalSection(ligne.cote, ligne.libelle))
-                                )
-                                : formatNum(getNET(ligne))
-                              }
-                            </span>
-                          )}
-                        </div> 
+                          {isTotal(ligne)
+                            ? isFinalTotal(ligne)
+                              ? formatNum(getTotalNet(ligne.cote))
+                              : formatNum(getTotalSection(ligne.cote, ligne.libelle))
+                            : formatNum(getNET(ligne))
+                          }
+                        </span>
+                      )}
+                    </div>
 
                     {/* N-1 — Brut */}
-                        <div className="col-span-1 border-l border-white/10 flex items-center">
-                          {!ligne.is_categorie && (
-                            ligne.is_total ? (
-                              <span className="w-full px-2 py-2 text-xs text-right font-mono text-gray-500">
-                                {ligne.libelle === 'TOTAL ACTIFS' || ligne.libelle === 'TOTAL PASSIFS'
-                                  ? formatNum(getTotalBrutPrecedent(ligne.cote))
-                                  : formatNum(getBrutSectionPrecedent(ligne.cote, ligne.libelle))
-                                }
-                              </span>
-                            ) : (
-                              <input
-                                type="number"
-                                value={ligne.brut_precedent || ''}
-                                onChange={e => handleUpdateLigne(ligne.id, 'brut_precedent', e.target.value)}
-                                className="w-full px-2 py-2 text-xs text-right font-mono bg-transparent border-0 outline-none focus:bg-white/5 text-gray-500 transition-colors"
-                                placeholder="0"
-                              />
-                            )
-                          )}
-                        </div>
+                    <div className="col-span-1 border-l border-white/10 flex items-center">
+                      {!ligne.is_categorie && (
+                        isTotal(ligne) ? (
+                          <span className="w-full px-2 py-2 text-xs text-right font-mono text-gray-500">
+                            {isFinalTotal(ligne)
+                              ? formatNum(getTotalBrutPrecedent(ligne.cote))
+                              : formatNum(getBrutSectionPrecedent(ligne.cote, ligne.libelle))
+                            }
+                          </span>
+                        ) : (
+                          <input
+                            type="number"
+                            value={ligne.brut_precedent || ''}
+                            onChange={e => handleUpdateLigne(ligne.id, 'brut_precedent', e.target.value)}
+                            className="w-full px-2 py-2 text-xs text-right font-mono bg-transparent border-0 outline-none focus:bg-white/5 text-gray-500 transition-colors"
+                            placeholder="0"
+                          />
+                        )
+                      )}
+                    </div>
 
                     {/* N-1 — Amorts */}
-                      <div className="col-span-1 border-l border-white/5 flex items-center">
-                        {!ligne.is_categorie && (
-                          ligne.is_total ? (
-                            <span className="w-full px-2 py-2 text-xs text-right font-mono text-red-400/40">
-                              {ligne.libelle === 'TOTAL ACTIFS' || ligne.libelle === 'TOTAL PASSIFS'
-                                ? formatNum(getTotalAmortsPrecedent(ligne.cote))
-                                : formatNum(getAmortsSectionPrecedent(ligne.cote, ligne.libelle))
-                              }
-                            </span>
-                          ) : (
-                            <input
-                              type="number"
-                              value={ligne.amorts_deprec_precedent || ''}
-                              onChange={e => handleUpdateLigne(ligne.id, 'amorts_deprec_precedent', e.target.value)}
-                              className="w-full px-2 py-2 text-xs text-right font-mono bg-transparent border-0 outline-none focus:bg-white/5 text-red-400/40 transition-colors"
-                              placeholder="0"
-                            />
-                          )
-                        )}
-                      </div>
+                    <div className="col-span-1 border-l border-white/5 flex items-center">
+                      {!ligne.is_categorie && (
+                        isTotal(ligne) ? (
+                          <span className="w-full px-2 py-2 text-xs text-right font-mono text-red-400/40">
+                            {isFinalTotal(ligne)
+                              ? formatNum(getTotalAmortsPrecedent(ligne.cote))
+                              : formatNum(getAmortsSectionPrecedent(ligne.cote, ligne.libelle))
+                            }
+                          </span>
+                        ) : (
+                          <input
+                            type="number"
+                            value={ligne.amorts_deprec_precedent || ''}
+                            onChange={e => handleUpdateLigne(ligne.id, 'amorts_deprec_precedent', e.target.value)}
+                            className="w-full px-2 py-2 text-xs text-right font-mono bg-transparent border-0 outline-none focus:bg-white/5 text-red-400/40 transition-colors"
+                            placeholder="0"
+                          />
+                        )
+                      )}
+                    </div>
 
-                    {/* N-1 — Net (calculé) */}
+                    {/* N-1 — Net */}
                     <div className="col-span-2 border-l border-white/5 flex items-center justify-end px-3">
                       {!ligne.is_categorie && (
                         <span className="text-xs font-mono text-gray-500">
-                          {ligne.is_total
-                            ? (ligne.libelle === 'TOTAL ACTIFS' || ligne.libelle === 'TOTAL PASSIFS'
+                          {isTotal(ligne)
+                            ? isFinalTotal(ligne)
                               ? formatNum(getTotalNetPrecedent(ligne.cote))
                               : formatNum(getTotalSectionPrecedent(ligne.cote, ligne.libelle))
-                            )
                             : formatNum(getNETPrecedent(ligne))
                           }
                         </span>
-                      )}    
-                  </div>
+                      )}
+                    </div>
 
                   </div>
                 ))}

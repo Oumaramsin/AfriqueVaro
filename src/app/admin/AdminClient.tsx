@@ -240,7 +240,7 @@ export default function AdminClient({
               <p className="text-xs text-gray-500 mt-0.5">Gérer les sociétés cotées</p>
             </div>    
           </Link>
-          
+
           <Link href="/admin/bilans">
             <div className="bg-[#141414] rounded-2xl border border-white/5 p-4 hover:border-[#C8A951]/30 transition-all cursor-pointer">
               <div className="text-2xl mb-2">📊</div>
@@ -249,6 +249,13 @@ export default function AdminClient({
             </div>
           </Link>
         </div>
+
+        <Link href="/admin/comptes-resultats">
+          <div className="bg-[#141414] rounded-2xl border border-white/5 p-4 hover:border-[#C8A951]/30 transition-all cursor-pointer">
+            <div className="text-2xl mb-2">📈</div>
+            <p className="text-sm font-medium text-white">Comptes de résultats</p>
+          </div>
+        </Link>
 
         
 
